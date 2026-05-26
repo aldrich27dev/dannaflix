@@ -1,16 +1,31 @@
-# React + Vite
+# 🎬 DANNAFLIX - Movie & Series Streaming Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A high-performance, mobile-first movie and series discovery platform built with **React + Vite**, **Tailwind CSS v4**, and the **TMDB API**. This project features a "Bento-style" UI, dark mode aesthetics, and a custom video player integration.
 
-Currently, two official plugins are available:
+## 🚀 Live Demo
+[View Live Project]((https://aldrich27dev.github.io/dannaflix/))
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Dynamic Video Player**: Automatically switches between Movie and TV Show modes using `vidsrc.me`.
+- **Regional Collections**: Dedicated rows for **Pinoy Cinema** (Filipino Movies) and **Asian Dramas** (KR, JP, CN, TH).
+- **Responsive Navigation**: Sleek top-bar for desktop and an intuitive bottom-tab bar for mobile users.
+- **Bento UI Design**: Clean, high-contrast minimalist interface inspired by modern design trends.
+- **Micro-interactions**: Smooth transitions and hover effects powered by **Framer Motion**.
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Framework**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Data Source**: [TMDB API](https://www.themoviedb.org/documentation/api)
+
+## 👨‍💻 HUHU
+**Aldrich Naag**  
+*3rd-year IT Student at Global Reciprocal Colleges (GRC)*
+
+---
+*Disclaimer: This project is for educational purposes. All movie data and media are provided by third-party APIs.*
