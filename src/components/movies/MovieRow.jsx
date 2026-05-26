@@ -59,7 +59,7 @@ function MovieRow({ title, movies = [], onSelect }) {
         >
           {movies.map((movie) => (
             <MovieCard
-              key={movie.id}
+              key={movie.key ?? movie.id}
               movie={movie}
               onSelect={onSelect}
             />

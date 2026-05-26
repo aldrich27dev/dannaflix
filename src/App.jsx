@@ -4,18 +4,43 @@ import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import MovieCard from './components/movies/MovieCard'
 import MovieRow from './components/movies/MovieRow'
+import OnboardingModal from './components/OnboardingModal'
 import VideoPlayer from './components/VideoPlayer'
 import {
   getAsianSeries,
+  getMoviesByCategory,
+  getCustomFeaturedSeries,
   getFilipinoMovies,
+  getMoreFilipinoMovies,
   getNowPlayingMovies,
   getPopularMovies,
-  getPopularTV,
+  getMoviesByPersonalInterests,
   getOnTheAirTV,
   getTrending,
   getTrendingTV,
   searchMovies,
 } from './services/tmdb'
+
+const CATEGORIES = [
+  { name: 'Pinoy', id: 'ph' },
+  { name: 'Action', id: 28 },
+  { name: 'Adventure', id: 12 },
+  { name: 'Animation', id: 16 },
+  { name: 'Comedy', id: 35 },
+  { name: 'Crime', id: 80 },
+  { name: 'Documentary', id: 99 },
+  { name: 'Drama', id: 18 },
+  { name: 'Family', id: 10751 },
+  { name: 'Fantasy', id: 14 },
+  { name: 'History', id: 36 },
+  { name: 'Horror', id: 27 },
+  { name: 'Music', id: 10402 },
+  { name: 'Mystery', id: 9648 },
+  { name: 'Romance', id: 10749 },
+  { name: 'Sci-Fi', id: 878 },
+  { name: 'Thriller', id: 53 },
+  { name: 'War', id: 10752 },
+]
 
 function isRenderableTitle(title) {
   if (!title?.id) return false
@@ -27,7 +52,8 @@ function isRenderableTitle(title) {
 }
 
 function App() {
-  const [activeSection, setActiveSection] = useState('home')
+  const [activeTab, setActiveTab] = useState('home')
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -36,11 +62,27 @@ function App() {
   const [popularMovies, setPopularMovies] = useState([])
   const [nowPlayingMovies, setNowPlayingMovies] = useState([])
   const [filipinoMovies, setFilipinoMovies] = useState([])
+  const [moreFilipinoMovies, setMoreFilipinoMovies] = useState([])
   const [trendingTV, setTrendingTV] = useState([])
-  const [popularTV, setPopularTV] = useState([])
+  const [featuredSeries, setFeaturedSeries] = useState([])
+  const [recommended, setRecommended] = useState([])
   const [onAirTV, setOnAirTV] = useState([])
   const [asianSeries, setAsianSeries] = useState([])
+  const [categoryMovies, setCategoryMovies] = useState([])
   const [selected, setSelected] = useState(null)
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false
+
+    const interests = window.localStorage.getItem('dannaflix_interests')
+    if (!interests) return true
+
+    try {
+      const parsed = JSON.parse(interests)
+      return !(Array.isArray(parsed) && parsed.length > 0)
+    } catch {
+      return true
+    }
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -57,8 +99,9 @@ function App() {
           popularMoviesResponse,
           nowPlayingResponse,
           filipinoResponse,
+          moreFilipinoResponse,
           trendingTVResponse,
-          popularTVResponse,
+          featuredSeriesResponse,
           onAirTVResponse,
           asianSeriesResponse,
         ] = await Promise.all([
@@ -66,8 +109,9 @@ function App() {
           getPopularMovies(),
           getNowPlayingMovies(),
           getFilipinoMovies(),
+          getMoreFilipinoMovies(),
           getTrendingTV(),
-          getPopularTV(),
+          getCustomFeaturedSeries(),
           getOnTheAirTV(),
           getAsianSeries(),
         ])
@@ -79,9 +123,30 @@ function App() {
         setNowPlayingMovies(nowPlayingResponse?.results ?? [])
         setFilipinoMovies(filipinoResponse?.results ?? [])
         setTrendingTV(trendingTVResponse?.results ?? [])
-        setPopularTV(popularTVResponse?.results ?? [])
+        setMoreFilipinoMovies(moreFilipinoResponse?.results ?? [])
+        setFeaturedSeries(featuredSeriesResponse?.results ?? [])
         setOnAirTV(onAirTVResponse?.results ?? [])
         setAsianSeries(asianSeriesResponse?.results ?? [])
+
+        if (typeof window !== 'undefined') {
+          try {
+            const savedInterests = window.localStorage.getItem('dannaflix_interests')
+
+            if (savedInterests) {
+              const parsedInterests = JSON.parse(savedInterests)
+              const recommendationResponse = await getMoviesByPersonalInterests(parsedInterests)
+
+              if (!mounted) return
+
+              setRecommended(recommendationResponse?.results ?? [])
+            } else if (mounted) {
+              setRecommended([])
+            }
+          } catch {
+            if (!mounted) return
+            setRecommended([])
+          }
+        }
       } catch {
         if (!mounted) return
         setError('TMDB could not be reached right now.')
@@ -143,9 +208,47 @@ function App() {
     }
   }, [searchQuery])
 
+  const handleSaveInterests = async (genreIds) => {
+    setShowOnboarding(false)
+
+    try {
+      const recommendationResponse = await getMoviesByPersonalInterests(genreIds)
+      setRecommended(recommendationResponse?.results ?? [])
+    } catch {
+      setRecommended([])
+    }
+  }
+  
+
+ const handleCategorySelect = async (id) => {
+    setSelectedCategoryId(id);
+    setActiveTab('movies');
+    setSearchQuery('');
+    
+    try {
+      let data;
+      
+      // If the ID is 'ph', use your existing Filipino movie service
+      if (id === 'ph') {
+        const response = await getFilipinoMovies();
+        data = { results: response.results || [] };
+      } 
+      // Otherwise, use the genre-based fetcher
+      else {
+        data = await getMoviesByCategory(id);
+      }
+      
+      setCategoryMovies(data.results || []);
+    } catch (err) {
+      console.error("Error fetching category:", err);
+      setCategoryMovies([]);
+    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const featuredMovie =
     trending[0] ?? popularMovies[0] ?? nowPlayingMovies[0] ?? filipinoMovies[0] ?? null
-  const hasSearchQuery = searchQuery.trim().length > 0
 
   const movieRows = useMemo(
     () => [
@@ -153,71 +256,110 @@ function App() {
       { title: 'Popular Movies', movies: popularMovies.filter(isRenderableTitle) },
       { title: 'New Releases', movies: nowPlayingMovies.filter(isRenderableTitle) },
       { title: 'Pinoy Cinema', movies: filipinoMovies.filter(isRenderableTitle) },
+      { title: 'More Filipino Hits', movies: moreFilipinoMovies.filter(isRenderableTitle) },
     ],
     [filipinoMovies, nowPlayingMovies, popularMovies, trending],
+  )
+
+  const featuredSeriesRow = useMemo(
+    () => ({
+      title: 'Sci-Fi & Action Favorites',
+      movies: featuredSeries.filter(isRenderableTitle),
+    }),
+    [featuredSeries],
   )
 
   const tvRows = useMemo(
     () => [
       { title: 'Trending Series', movies: trendingTV.filter(isRenderableTitle) },
-      { title: 'Popular Series', movies: popularTV.filter(isRenderableTitle) },
+      featuredSeriesRow,
       { title: 'On The Air', movies: onAirTV.filter(isRenderableTitle) },
       { title: 'Asian Dramas', movies: asianSeries.filter(isRenderableTitle) },
     ],
-    [asianSeries, onAirTV, popularTV, trendingTV],
+    [asianSeries, featuredSeriesRow, onAirTV, trendingTV],
   )
 
-  const visibleRows = useMemo(() => {
-    if (activeSection === 'movies') return movieRows
-    if (activeSection === 'series') return tvRows
-    return [...movieRows, ...tvRows]
-  }, [activeSection, movieRows, tvRows])
+ const allLibraryTitles = useMemo(
+  () => {
+    const combined = [...movieRows, ...tvRows].flatMap((row) => row.movies);
+    const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+    
+    return unique;
+  },
+  [movieRows, tvRows],
+);
 
-  const handleSelectSection = (section) => {
-    setActiveSection(section)
-    setSearchQuery('')
-    setSearchResults([])
-    setSearchError('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  const visibleRows = useMemo(() => {
+   if (selectedCategoryId) {
+  const categoryName = CATEGORIES.find(c => c.id === selectedCategoryId)?.name || 'Category'
+
+  const localFiltered = allLibraryTitles.filter(m => m.genre_ids?.includes(selectedCategoryId));
+      const combinedMovies = [...new Map([...localFiltered, ...categoryMovies].map(m => [m.id, m])).values()];
+    
+   return [{ 
+        title: categoryName, 
+        movies: combinedMovies
+      }]
   }
+
+  
+
+  if (activeTab === 'movies') return [{ title: 'All Movies', movies: allLibraryTitles.filter(m => !m.first_air_date) }, ...movieRows]
+  if (activeTab === 'series') return tvRows
+  
+  return [
+      ...(recommended.length ? [{ title: 'Recommended For You', movies: recommended.filter(isRenderableTitle) }] : []),
+      ...movieRows,
+      ...tvRows,
+    ]
+  }, [activeTab, movieRows, recommended, tvRows, selectedCategoryId, allLibraryTitles])
+
+  const homeRows = visibleRows
 
   const handleSearchChange = (value) => {
     setSearchQuery(value)
-    setActiveSection('home')
+    setSelectedCategoryId(null)
+    setActiveTab('search')
     setSelected(null)
-  }
-
-  const handleNavigateHome = () => {
-    setActiveSection('home')
-    setSearchQuery('')
-    setSearchResults([])
-    setSearchError('')
-    setSelected(null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handlePlay = (movie) => {
     if (!movie) return
-    setSelected(movie)
+
+    const catalogMatch = allLibraryTitles.find((entry) => entry.id === movie.id)
+    const playableMovie = {
+      ...catalogMatch,
+      ...movie,
+    }
+
+    setSelected(playableMovie)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] pb-20 pt-16 text-white md:pb-0 md:pt-0">
-      <Navbar
-        activeSection={activeSection}
-        searchQuery={searchQuery}
-        onNavigateHome={handleNavigateHome}
-        onSelectMovies={() => handleSelectSection('movies')}
-        onSelectTV={() => handleSelectSection('series')}
-        onSearchChange={handleSearchChange}
-        onSearchClick={() => setActiveSection('home')}
-      />
+     <Navbar
+  activeTab={activeTab}
+  setActiveTab={(tab) => {
+    setSelectedCategoryId(null) // Reset category when clicking tabs
+    setActiveTab(tab)
+  }}
+  searchQuery={searchQuery}
+  onSearchChange={handleSearchChange}
+  onCategorySelect={handleCategorySelect}
+  onCategorySelect={(id) => {
+    setSelectedCategoryId(id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }}
+  selectedCategoryId={selectedCategoryId}
+/>
+
+      {showOnboarding ? <OnboardingModal onSave={handleSaveInterests} /> : null}
 
       <AnimatePresence mode="wait">
         {selected ? (
           <motion.div
-            key="player"
+            key={`${selected.id}-${selected.mediaType ?? (selected.first_air_date || selected.name ? 'tv' : 'movie')}`}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
@@ -233,7 +375,7 @@ function App() {
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.28 }}
           >
-            {!hasSearchQuery ? <Hero movie={featuredMovie} onPlay={handlePlay} /> : null}
+            {activeTab === 'home' ? <Hero movie={featuredMovie} onPlay={handlePlay} /> : null}
 
             <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
               {error ? (
@@ -253,7 +395,7 @@ function App() {
                 </div>
               ) : null}
 
-              {hasSearchQuery ? (
+              {activeTab === 'search' ? (
                 <section className="space-y-4">
                   <div className="flex items-end justify-between gap-4">
                     <div>
@@ -266,47 +408,94 @@ function App() {
                     </div>
                   </div>
 
-                  {searchLoading ? (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <div
-                          key={index}
-                          className="h-56 animate-pulse rounded-3xl border border-white/10 bg-white/5"
-                        />
-                      ))}
-                    </div>
-                  ) : searchError ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 backdrop-blur">
-                      {searchError}
-                    </div>
-                  ) : searchResults.filter(isRenderableTitle).length ? (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                      {searchResults
-                        .filter(isRenderableTitle)
-                        .map((movie) => (
-                          <MovieCard
-                            key={movie.id}
-                            movie={movie}
-                            onSelect={handlePlay}
+                  {searchQuery.trim() ? (
+                    searchLoading ? (
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                          <div
+                            key={index}
+                            className="h-56 animate-pulse rounded-3xl border border-white/10 bg-white/5"
                           />
                         ))}
-                    </div>
+                      </div>
+                    ) : searchError ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 backdrop-blur">
+                        {searchError}
+                      </div>
+                    ) : searchResults.filter(isRenderableTitle).length ? (
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+                        {searchResults
+                          .filter(isRenderableTitle)
+                          .map((movie) => (
+                            <MovieCard
+                              key={movie.id}
+                              movie={movie}
+                              onSelect={handlePlay}
+                            />
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 backdrop-blur">
+                        No titles found for this search.
+                      </div>
+                    )
                   ) : (
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 backdrop-blur">
-                      No titles found for this search.
+                      Type a title to start searching.
                     </div>
                   )}
                 </section>
+              ) : activeTab === 'profile' ? (
+                <section className="mx-auto w-full max-w-md space-y-6 pt-6">
+                  <div className="rounded-3xl border border-white/10 bg-zinc-950 p-6 text-center shadow-xl">
+                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border-2 border-white/20 bg-[#E50914] text-xl font-black text-white">
+                      D
+                    </div>
+                    <h3 className="text-lg font-black uppercase tracking-tight">
+                      Active Guest Session
+                    </h3>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      Preferences saved locally inside your browser context
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.removeItem('dannaflix_interests')
+                        setRecommended([])
+                        setShowOnboarding(true)
+                      }}
+                      className="mt-6 w-full cursor-pointer rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-bold text-white transition-all hover:border-[#E50914] hover:bg-[#E50914]/20"
+                    >
+                      Reset Genre Interests
+                    </button>
+                  </div>
+                </section>
               ) : (
                 <>
-                  {visibleRows.map((row) => (
-                    <MovieRow
-                      key={row.title}
-                      title={row.title}
-                      movies={row.movies}
-                      onSelect={handlePlay}
-                    />
-                  ))}
+                {selectedCategoryId ? (
+  <section className="space-y-6 pt-6">
+    <h3 className="text-2xl font-black uppercase text-white">{visibleRows[0].title}</h3>
+    {visibleRows[0].movies.length > 0 ? (
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+        {visibleRows[0].movies.map((movie) => (
+          <MovieCard key={movie.id} movie={movie} onSelect={handlePlay} />
+        ))}
+      </div>
+    ) : (
+      <p className="text-zinc-500">No movies found in this category.</p>
+    )}
+  </section>
+) : (
+  homeRows.map((row) => (
+    <MovieRow
+      key={row.title}
+      title={row.title}
+      movies={row.movies}
+      onSelect={handlePlay}
+    />
+  ))
+)}
 
                   <footer className="mt-6 border-t border-white/10 bg-white/[0.02] px-5 py-6 text-sm text-white/55 backdrop-blur-sm sm:px-6">
                     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3">

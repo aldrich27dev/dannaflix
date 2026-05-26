@@ -6,6 +6,12 @@ const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p'
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY
 const TMDB_BEARER_TOKEN = import.meta.env.VITE_TMDB_BEARER_TOKEN
 
+const getHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${TMDB_BEARER_TOKEN}`
+})
+
+
 async function request(path, options = {}) {
   const url = new URL(`${TMDB_BASE_URL}${path}`)
 
@@ -82,6 +88,35 @@ export function getPopularTV() {
   })
 }
 
+export function getPopularSeries() {
+  return request('/tv/popular', {
+    params: { language: 'en-US', page: '1' },
+  })
+}
+
+export async function getCustomFeaturedSeries() {
+  const ids = [4607, 66732, 1399, 71446]
+
+  try {
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          return await request(`/tv/${id}`, {
+            params: { language: 'en-US' },
+          })
+        } catch {
+          return null
+        }
+      }),
+    )
+
+    return { results: results.filter(Boolean) }
+  } catch (error) {
+    console.error('Error fetching hardcoded sci-fi series:', error)
+    return { results: [] }
+  }
+}
+
 export function getOnTheAirTV() {
   return request('/tv/on_the_air', {
     params: { language: 'en-US', page: '1' },
@@ -112,6 +147,29 @@ export function getMoviesByGenre(genreId) {
   })
 }
 
+export function getMoviesByPersonalInterests(genreIds) {
+  if (!genreIds) return Promise.resolve({ results: [] })
+
+  const value = Array.isArray(genreIds)
+    ? genreIds.map((id) => String(id).trim()).filter(Boolean).join(',')
+    : String(genreIds)
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .join(',')
+
+  if (!value) return Promise.resolve({ results: [] })
+
+  return request('/discover/movie', {
+    params: {
+      language: 'en-US',
+      sort_by: 'popularity.desc',
+      with_genres: value,
+      page: '1',
+    },
+  })
+}
+
 export function getGenres() {
   return request('/genre/movie/list', {
     params: { language: 'en-US' },
@@ -138,13 +196,18 @@ export function getTVSeasonDetails(tvId, seasonNumber, options = {}) {
   })
 }
 
-// Ensure this matches the usage in VideoPlayer.jsx
-export function getMovieVideos(movieId, options = {}) {
-  return request(`/movie/${movieId}/videos`, {
+// Fetch media trailers/clips from TMDB
+export function getMovieVideos(id, typeOrOptions = 'movie', maybeOptions = {}) {
+  const type =
+    typeof typeOrOptions === 'string' ? typeOrOptions : 'movie'
+  const options =
+    typeof typeOrOptions === 'string' ? maybeOptions : typeOrOptions
+
+  return request(`/${type}/${id}/videos`, {
     ...options,
-    params: { 
-      ...(options.params ?? {}),
-      language: 'en-US' 
+    params: {
+      ...(options?.params ?? {}),
+      language: 'en-US',
     },
   })
 }
@@ -166,6 +229,18 @@ export function getFilipinoMovies() {
   })
 }
 
+export function getMoreFilipinoMovies() {
+  return request('/discover/movie', {
+    params: {
+      with_origin_country: 'PH',
+      sort_by: 'vote_average.desc',
+      'vote_count.gte': '50',
+      language: 'en-US',
+      page: '1',
+    },
+  })
+}
+
 // Fetch Asian Series (KR, JP, CN, TH)
 export function getAsianSeries() {
   return request('/discover/tv', {
@@ -180,4 +255,29 @@ export function getAsianSeries() {
 
 export function getTrending() {
   return getTrendingMovies()
+}
+
+// Replace your manual fetch versions with these, 
+// which use your central 'request' helper:
+
+export function getMoviesByCategory(genreId, page = 1) {
+  return request('/discover/movie', {
+    params: {
+      language: 'en-US',
+      sort_by: 'popularity.desc',
+      with_genres: genreId,
+      page: String(page),
+      'vote_count.gte': '100', // Keeps consistency with your other genre calls
+    },
+  })
+}
+
+export function getDiscoverMovies(genreId, page = 1) {
+  return request('/discover/movie', {
+    params: {
+      language: 'en-US',
+      with_genres: genreId,
+      page: String(page),
+    },
+  })
 }
