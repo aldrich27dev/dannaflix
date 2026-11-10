@@ -1,48 +1,73 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { Check } from 'lucide-react'
+import { GENRES, ONBOARDING_GENRE_IDS } from '../constants'
 
-const AVAILABLE_GENRES = [
-  { id: 28, name: 'Action' },
-  { id: 27, name: 'Horror' },
-  { id: 878, name: 'Sci-Fi' },
-  { id: 35, name: 'Comedy' },
-  { id: 10749, name: 'Romance' },
-  { id: 53, name: 'Thriller' },
-  { id: 14, name: 'Fantasy' },
-  { id: 18, name: 'Drama' },
-]
+const AVAILABLE_GENRES = GENRES.filter((genre) =>
+  ONBOARDING_GENRE_IDS.includes(genre.id),
+)
 
-function OnboardingModal({ onSave }) {
-  const [selected, setSelected] = useState([])
+function OnboardingModal({
+  onSave,
+  initialInterests = [],
+  onCancel,
+  onSkip,
+  editing = false,
+}) {
+  const [selected, setSelected] = useState(() => initialInterests.map(Number))
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      if (onCancel) onCancel()
+      else if (onSkip) onSkip()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onCancel, onSkip])
 
   const toggleGenre = (id) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((genreId) => genreId !== id) : [...prev, id],
+    setSelected((previous) =>
+      previous.includes(id)
+        ? previous.filter((genreId) => genreId !== id)
+        : [...previous, id],
     )
   }
 
   const handleSubmit = () => {
     if (!selected.length) return
-
-    window.localStorage.setItem('dannaflix_interests', JSON.stringify(selected))
     onSave?.(selected)
   }
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/90 p-0 backdrop-blur-md sm:items-center sm:p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-6 text-center shadow-2xl md:p-8"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-heading"
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-white/10 bg-zinc-950 p-6 text-center shadow-2xl sm:max-h-[90dvh] sm:rounded-3xl md:p-8"
       >
         <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#E50914]">
-          Welcome to Dannaflix
+          {editing ? 'Personalize DannaFlix' : 'Welcome to DannaFlix'}
         </span>
-        <h2 className="mt-1 mb-3 text-2xl font-black uppercase tracking-tighter text-white">
-          Choose your interests
+        <h2
+          id="onboarding-heading"
+          className="mb-3 mt-1 text-2xl font-black uppercase tracking-tighter text-white"
+        >
+          {editing ? 'Update your interests' : 'Choose your interests'}
         </h2>
-        <p className="mb-6 text-xs text-zinc-400">
-          Select genres you love to personalize your feed immediately.
+        <p className="mb-6 text-xs leading-5 text-zinc-400">
+          Select genres you love to personalize your feed. You can change this anytime in
+          Settings — no account needed.
         </p>
 
         <div className="mb-6 grid grid-cols-2 gap-3">
@@ -53,6 +78,7 @@ function OnboardingModal({ onSave }) {
               <button
                 key={genre.id}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => toggleGenre(genre.id)}
                 className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-left text-xs font-bold transition-all ${
                   isSelected
@@ -61,7 +87,7 @@ function OnboardingModal({ onSave }) {
                 }`}
               >
                 <span>{genre.name}</span>
-                {isSelected ? <span className="text-[10px]">+</span> : null}
+                {isSelected ? <Check size={14} /> : null}
               </button>
             )
           })}
@@ -77,8 +103,28 @@ function OnboardingModal({ onSave }) {
               : 'cursor-not-allowed bg-zinc-800 text-zinc-500'
           }`}
         >
-          Let's Start Browsing
+          {editing ? 'Save interests' : "Let's start browsing"}
         </button>
+
+        {editing && onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="mt-3 w-full rounded-xl py-3 text-xs font-bold text-zinc-400 transition hover:text-white"
+          >
+            Cancel
+          </button>
+        ) : null}
+
+        {!editing && onSkip ? (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="mt-3 w-full rounded-xl py-3 text-xs font-bold text-zinc-500 transition hover:text-white"
+          >
+            Skip for now
+          </button>
+        ) : null}
       </motion.div>
     </div>
   )
