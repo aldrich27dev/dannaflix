@@ -65,6 +65,47 @@ function loadYouTubePlayerApi() {
   return youtubeApiPromise
 }
 
+const AUTO_HIDE_DELAY = 3000
+
+function useAutoHideControls(delay = AUTO_HIDE_DELAY, onHide) {
+  const [visible, setVisible] = useState(true)
+  const hideTimerRef = useRef(null)
+  const hoveredRef = useRef(false)
+
+  const clearHideTimer = useCallback(() => {
+    window.clearTimeout(hideTimerRef.current)
+  }, [])
+
+  const scheduleHide = useCallback(() => {
+    clearHideTimer()
+    hideTimerRef.current = window.setTimeout(() => {
+      if (hoveredRef.current) return
+      setVisible(false)
+      onHide?.()
+    }, delay)
+  }, [clearHideTimer, delay, onHide])
+
+  const revealControls = useCallback(() => {
+    setVisible(true)
+    scheduleHide()
+  }, [scheduleHide])
+
+  const holdControls = useCallback(() => {
+    hoveredRef.current = true
+    clearHideTimer()
+    setVisible(true)
+  }, [clearHideTimer])
+
+  const releaseControls = useCallback(() => {
+    hoveredRef.current = false
+    scheduleHide()
+  }, [scheduleHide])
+
+  useEffect(() => () => clearHideTimer(), [clearHideTimer])
+
+  return { controlsVisible: visible, revealControls, holdControls, releaseControls }
+}
+
 function FullscreenTrailerStage({
   movie,
   videoKey,
@@ -73,12 +114,15 @@ function FullscreenTrailerStage({
   onClose,
   onSwitchToMovie,
 }) {
-  const [overlayVisible, setOverlayVisible] = useState(true)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const playerHostRef = useRef(null)
   const playerRef = useRef(null)
-  const overlayTimerRef = useRef(null)
-  const overlayHoveredRef = useRef(false)
+  const {
+    controlsVisible: overlayVisible,
+    revealControls: revealOverlay,
+    holdControls: holdOverlay,
+    releaseControls: releaseOverlay,
+  } = useAutoHideControls(4000)
 
   useEffect(() => {
     if (!videoKey || loading) return undefined
@@ -114,34 +158,8 @@ function FullscreenTrailerStage({
   }, [videoKey, loading])
 
   useEffect(() => {
-    overlayTimerRef.current = window.setTimeout(() => {
-      if (!overlayHoveredRef.current) setOverlayVisible(false)
-    }, 4000)
-    return () => window.clearTimeout(overlayTimerRef.current)
-  }, [movie?.id])
-
-  const hideOverlayLater = () => {
-    window.clearTimeout(overlayTimerRef.current)
-    overlayTimerRef.current = window.setTimeout(() => {
-      if (!overlayHoveredRef.current) setOverlayVisible(false)
-    }, 4000)
-  }
-
-  const revealOverlay = () => {
-    setOverlayVisible(true)
-    hideOverlayLater()
-  }
-
-  const holdOverlay = () => {
-    overlayHoveredRef.current = true
-    window.clearTimeout(overlayTimerRef.current)
-    setOverlayVisible(true)
-  }
-
-  const releaseOverlay = () => {
-    overlayHoveredRef.current = false
-    hideOverlayLater()
-  }
+    revealOverlay()
+  }, [movie?.id, revealOverlay])
 
   const toggleSound = () => {
     if (!soundEnabled) {
@@ -191,7 +209,25 @@ function FullscreenTrailerStage({
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/65 via-transparent to-black/80" />
       ) : null}
 
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] sm:px-7 sm:py-6">
+      {!overlayVisible && videoKey && !loading ? (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-30"
+          onPointerMove={revealOverlay}
+          onPointerDown={revealOverlay}
+        />
+      ) : null}
+
+      <div
+        inert={!overlayVisible}
+        onMouseEnter={holdOverlay}
+        onMouseLeave={releaseOverlay}
+        onFocus={holdOverlay}
+        onBlur={releaseOverlay}
+        className={`absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-300 sm:px-7 sm:py-6 ${
+          overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -242,8 +278,11 @@ function FullscreenTrailerStage({
       </div>
 
       <div
+        inert={!overlayVisible}
         onMouseEnter={holdOverlay}
         onMouseLeave={releaseOverlay}
+        onFocus={holdOverlay}
+        onBlur={releaseOverlay}
         className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/65 to-transparent px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 transition-opacity duration-500 sm:px-10 sm:py-10 ${
           overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
@@ -303,8 +342,15 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
   )
   const [loadedUrl, setLoadedUrl] = useState('')
   const [playerReloadKey, setPlayerReloadKey] = useState(0)
-  const [chromeVisible, setChromeVisible] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
   const [isPlayerFullscreen, setIsPlayerFullscreen] = useState(false)
+  const closePanel = useCallback(() => setPanelOpen(false), [])
+  const {
+    controlsVisible,
+    revealControls,
+    holdControls,
+    releaseControls,
+  } = useAutoHideControls(AUTO_HIDE_DELAY, closePanel)
 
   const playerShellRef = useRef(null)
 
@@ -444,6 +490,10 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
   }, [])
 
   useEffect(() => {
+    if (mode === 'movie') revealControls()
+  }, [mode, revealControls])
+
+  useEffect(() => {
     onStateChange?.({
       mode,
       providerIndex,
@@ -480,6 +530,8 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
       }
       if (event.altKey || event.ctrlKey || event.metaKey) return
 
+      revealControls()
+
       if (event.key === 'Escape') {
         event.preventDefault()
         handleClose()
@@ -491,7 +543,7 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
 
     window.addEventListener('keydown', handleKeyboardShortcut)
     return () => window.removeEventListener('keydown', handleKeyboardShortcut)
-  }, [handleClose, togglePlayerFullscreen])
+  }, [handleClose, revealControls, togglePlayerFullscreen])
 
   const movieUrl = useMemo(
     () => PROVIDERS[providerIndex].build(movie?.id, seasonNumber, selectedEpisodeNumber, isTV),
@@ -541,6 +593,8 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      onPointerMove={mode === 'movie' ? revealControls : undefined}
+      onPointerDown={mode === 'movie' ? revealControls : undefined}
       className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950 text-white"
     >
       {mode === 'trailer' ? (
@@ -554,7 +608,25 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
         />
       ) : (
         <>
-          <div className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/80 via-black/35 to-transparent">
+          {!controlsVisible && !playerLoading ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 z-20"
+              onPointerMove={revealControls}
+              onPointerDown={revealControls}
+            />
+          ) : null}
+
+          <div
+            inert={!controlsVisible}
+            onMouseEnter={holdControls}
+            onMouseLeave={releaseControls}
+            onFocus={holdControls}
+            onBlur={releaseControls}
+            className={`absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/80 via-black/35 to-transparent transition-opacity duration-300 ${
+              controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          >
             <div className="flex items-start justify-between gap-3 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] sm:px-7 sm:py-6">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -589,20 +661,23 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setChromeVisible((visible) => !visible)}
-                  aria-expanded={chromeVisible}
+                  onClick={() => {
+                    setPanelOpen((open) => !open)
+                    revealControls()
+                  }}
+                  aria-expanded={panelOpen}
                   aria-label={
                     isTV
-                      ? chromeVisible
+                      ? panelOpen
                         ? 'Hide season and episode controls'
                         : 'Show season and episode controls'
-                      : chromeVisible
+                      : panelOpen
                         ? 'Hide server controls'
                         : 'Show server controls'
                   }
                   title={isTV ? 'Season and episode controls' : 'Server controls'}
                   className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3.5 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md transition hover:bg-black/75 ${
-                    chromeVisible ? 'bg-white/20 ring-1 ring-white/25' : 'bg-black/50'
+                    panelOpen ? 'bg-white/20 ring-1 ring-white/25' : 'bg-black/50'
                   }`}
                 >
                   <ListVideo size={16} />
@@ -665,8 +740,13 @@ function VideoPlayer({ movie, initialState = null, onClose, onStateChange }) {
             </div>
 
             <div
+              inert={!(controlsVisible && panelOpen)}
+              onMouseEnter={holdControls}
+              onMouseLeave={releaseControls}
+              onFocus={holdControls}
+              onBlur={releaseControls}
               className={`absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/45 to-transparent transition-opacity duration-300 ${
-                chromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+                controlsVisible && panelOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
               }`}
             >
               <div className="flex flex-wrap items-end justify-between gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-12 sm:px-7 sm:py-6">
